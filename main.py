@@ -33,8 +33,8 @@ my_models = sorted(name for name in model_zoo.__dict__
 model_names.extend(my_models)
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
-parser.add_argument('data', metavar='DIR',
-                    help='path to dataset')
+parser.add_argument('data', metavar='DIR', nargs='?', default='imagenet',
+                    help='path to dataset (default: imagenet)')
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                     choices=model_names,
                     help='model architecture: ' +
