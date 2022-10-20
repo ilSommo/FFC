@@ -93,6 +93,7 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
 parser.add_argument('--root_log', type=str, default='log')
 parser.add_argument('--root_model', type=str, default='checkpoint')
 parser.add_argument('--store_name', type=str, default="")
+parser.add_argument('--dummy', action='store_true', help="use fake data to benchmark")
 
 best_acc1 = 0
 
@@ -229,10 +230,15 @@ def main_worker(gpu, ngpus_per_node, args):
     cudnn.benchmark = True
 
     # Data loading code
-    traindir = os.path.join(args.data, 'train')
-    valdir = os.path.join(args.data, 'val')
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+    if args.dummy:
+        print("=> Dummy data is used!")
+        train_dataset = datasets.FakeData(1281167, (3, 224, 224), 1000, transforms.ToTensor())
+        val_dataset = datasets.FakeData(50000, (3, 224, 224), 1000, transforms.ToTensor())
+    else:
+        traindir = os.path.join(args.data, 'train')
+        valdir = os.path.join(args.data, 'val')
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                         std=[0.229, 0.224, 0.225])
 
     train_dataset = datasets.ImageFolder(
         traindir,
