@@ -22,6 +22,8 @@ from tensorboardX import SummaryWriter
 import numpy as np
 
 import model_zoo
+import warnings
+# warnings.filterwarnings("ignore")
 
 model_names = sorted(name for name in models.__dict__
                      if name.islower() and not name.startswith("__")
@@ -40,8 +42,10 @@ parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet18',
                     help='model architecture: ' +
                     ' | '.join(model_names) +
                     ' (default: resnet18)')
-parser.add_argument('--ratio', type=float, default=0.5)
+parser.add_argument('--ratio', type=float, default=0.25)
 parser.add_argument('--lfu', default=False, action="store_true")
+parser.add_argument('--bn', default=False, action="store_true")
+parser.add_argument('--relu', default=True, action="store_true")
 parser.add_argument('--use_se', default=False, action="store_true")
 parser.add_argument('-j', '--workers', default=16, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
@@ -49,12 +53,12 @@ parser.add_argument('--epochs', default=90, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
-parser.add_argument('-b', '--batch-size', default=256, type=int,
+parser.add_argument('-b', '--batch-size', default=128, type=int,
                     metavar='N',
                     help='mini-batch size (default: 256), this is the total '
                          'batch size of all GPUs on the current node when '
                          'using Data Parallel or Distributed Data Parallel')
-parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
+parser.add_argument('--lr', '--learning-rate', default=0.01, type=float,
                     metavar='LR', help='initial learning rate', dest='lr')
 parser.add_argument('--lr_steps', default=[30, 60, 80], type=float, nargs="+",
                     metavar='LRSteps', help='epochs to decay learning rate by 10')
@@ -94,6 +98,8 @@ parser.add_argument('--root_log', type=str, default='log')
 parser.add_argument('--root_model', type=str, default='checkpoint')
 parser.add_argument('--store_name', type=str, default="")
 parser.add_argument('--dummy', action='store_true', help="use fake data to benchmark")
+parser.add_argument('--nclasses', default=10, type=int,
+                    help='Number of classes.')
 
 best_acc1 = 0
 
@@ -155,7 +161,7 @@ def main_worker(gpu, ngpus_per_node, args):
         print("=> creating model '{}'".format(args.arch))
         if args.arch.startswith('ffc_'):
             model = model_zoo.__dict__[args.arch](
-                ratio=args.ratio, lfu=args.lfu, use_se=args.use_se)
+                ratio=args.ratio, lfu=args.lfu, relu=args.relu, bn=args.bn,  use_se=args.use_se, num_classes=args.nclasses)
         else:
             model = model_zoo.__dict__[args.arch]()
         if args.pretrained:
@@ -165,7 +171,7 @@ def main_worker(gpu, ngpus_per_node, args):
         model = models.__dict__[args.arch](pretrained=True)
     else:
         print("=> creating model '{}'".format(args.arch))
-        model = models.__dict__[args.arch]()
+        model = models.__dict__[args.arch](num_classes=args.nclasses)
 
     print(model)
 
@@ -206,9 +212,12 @@ def main_worker(gpu, ngpus_per_node, args):
     # define loss function (criterion) and optimizer
     criterion = nn.CrossEntropyLoss().cuda(args.gpu)
 
-    optimizer = torch.optim.SGD(model.parameters(), args.lr,
+    optimizer = torch.optim.RMSprop(model.parameters(),
+                                lr=args.lr,
+                                alpha=0.9,
                                 momentum=args.momentum,
-                                weight_decay=args.weight_decay)
+                                eps=1
+                                )
 
     # optionally resume from a checkpoint
     if args.resume:
@@ -243,8 +252,9 @@ def main_worker(gpu, ngpus_per_node, args):
         train_dataset = datasets.ImageFolder(
             traindir,
             transforms.Compose([
-                transforms.RandomResizedCrop(224),
+                transforms.RandomResizedCrop(299),
                 transforms.RandomHorizontalFlip(),
+                transforms.ColorJitter(brightness=32/255,saturation=(0.5,1.5)),
                 transforms.ToTensor(),
                 normalize,
             ]))
@@ -252,8 +262,8 @@ def main_worker(gpu, ngpus_per_node, args):
         val_dataset = datasets.ImageFolder(
             valdir,
             transforms.Compose([
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
+                transforms.Resize(342),
+                transforms.CenterCrop(299),
                 transforms.ToTensor(),
                 normalize,
             ]))
@@ -319,7 +329,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args, tf_writer):
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
+    top5 = AverageMeter('Acc@3', ':6.2f')
     progress = ProgressMeter(len(train_loader), batch_time, data_time, losses, top1,
                              top5, prefix="Epoch: [{}]".format(epoch))
 
@@ -339,14 +349,16 @@ def train(train_loader, model, criterion, optimizer, epoch, args, tf_writer):
         adjust_learning_rate(optimizer, epoch, step, len(train_loader), args)
 
         # compute output
-        output = model(input)
-        loss = criterion(output, target)
+        output, aux = model(input)
+        # output = model(input)
+        loss = criterion(output, target) + criterion(aux, target)
+        # loss = criterion(output, target)
 
         # measure accuracy and record loss
-        acc1, acc5 = accuracy(output, target, topk=(1, 5))
+        acc1, acc3 = accuracy(output, target, topk=(1, 3))
         losses.update(loss.item(), input.size(0))
         top1.update(acc1[0], input.size(0))
-        top5.update(acc5[0], input.size(0))
+        top5.update(acc3[0], input.size(0))
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -381,7 +393,7 @@ def validate(val_loader, model, criterion, args, tf_writer=None, epoch=0):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
+    top5 = AverageMeter('Acc@3', ':6.2f')
     progress = ProgressMeter(len(val_loader), batch_time, losses, top1, top5,
                              prefix='Test: ')
 
@@ -400,10 +412,10 @@ def validate(val_loader, model, criterion, args, tf_writer=None, epoch=0):
             loss = criterion(output, target)
 
             # measure accuracy and record loss
-            acc1, acc5 = accuracy(output, target, topk=(1, 5))
+            acc1, acc3 = accuracy(output, target, topk=(1, 3))
             losses.update(loss.item(), input.size(0))
             top1.update(acc1[0], input.size(0))
-            top5.update(acc5[0], input.size(0))
+            top5.update(acc3[0], input.size(0))
 
             # measure elapsed time
             batch_time.update(time.time() - end)
@@ -413,7 +425,7 @@ def validate(val_loader, model, criterion, args, tf_writer=None, epoch=0):
                 progress.print(i)
 
         # TODO: this should also be done with the ProgressMeter
-        print(' * Acc@1 {top1.avg:.3f} Acc@5 {top5.avg:.3f}'
+        print(' * Acc@1 {top1.avg:.3f} Acc@3 {top5.avg:.3f}'
               .format(top1=top1, top5=top5))
 
     if tf_writer is not None:

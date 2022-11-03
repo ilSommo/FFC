@@ -26,9 +26,9 @@ class BasicBlock(nn.Module):
         # Both self.conv2 and self.downsample layers downsample the input when
         # stride != 1
         self.conv1 = FFC_BN_ACT(inplanes, width, kernel_size=3, padding=1, stride=stride,
-                                ratio_gin=ratio_gin, ratio_gout=ratio_gout, norm_layer=norm_layer, activation_layer=nn.ReLU, enable_lfu=lfu)
+                                ratio_gin=ratio_gin, ratio_gout=ratio_gout, norm_layer=norm_layer, activation_layer=nn.ReLU, lfu=lfu)
         self.conv2 = FFC_BN_ACT(width, planes * self.expansion, kernel_size=3, padding=1,
-                                ratio_gin=ratio_gout, ratio_gout=ratio_gout, norm_layer=norm_layer, enable_lfu=lfu)
+                                ratio_gin=ratio_gout, ratio_gout=ratio_gout, norm_layer=norm_layer, lfu=lfu)
         self.se_block = FFCSE_block(
             planes * self.expansion, ratio_gout) if use_se else nn.Identity()
         self.relu_l = nn.Identity() if ratio_gout == 1 else nn.ReLU(inplace=True)
@@ -39,7 +39,6 @@ class BasicBlock(nn.Module):
     def forward(self, x):
         x = x if type(x) is tuple else (x, 0)
         id_l, id_g = x if self.downsample is None else self.downsample(x)
-
         x = self.conv1(x)
         x = self.conv2(x)
         x_l, x_g = self.se_block(x)
@@ -61,13 +60,13 @@ class Bottleneck(nn.Module):
         # stride != 1
         self.conv1 = FFC_BN_ACT(inplanes, width, kernel_size=1,
                                 ratio_gin=ratio_gin, ratio_gout=ratio_gout,
-                                activation_layer=nn.ReLU, enable_lfu=lfu)
+                                activation_layer=nn.ReLU, lfu=lfu)
         self.conv2 = FFC_BN_ACT(width, width, kernel_size=3,
                                 ratio_gin=ratio_gout, ratio_gout=ratio_gout,
                                 stride=stride, padding=1, groups=groups,
-                                activation_layer=nn.ReLU, enable_lfu=lfu)
+                                activation_layer=nn.ReLU, lfu=lfu)
         self.conv3 = FFC_BN_ACT(width, planes * self.expansion, kernel_size=1,
-                                ratio_gin=ratio_gout, ratio_gout=ratio_gout, enable_lfu=lfu)
+                                ratio_gin=ratio_gout, ratio_gout=ratio_gout, lfu=lfu)
         self.se_block = FFCSE_block(
             planes * self.expansion, ratio_gout) if use_se else nn.Identity()
         self.relu_l = nn.Identity() if ratio_gout == 1 else nn.ReLU(inplace=True)
@@ -93,7 +92,7 @@ class Bottleneck(nn.Module):
 class FFCResNet(nn.Module):
 
     def __init__(self, block, layers, num_classes=1000, zero_init_residual=False,
-                 groups=1, width_per_group=64, norm_layer=None, ratio=0.5, lfu=True, use_se=False):
+                 groups=1, width_per_group=64, norm_layer=None, ratio=0.5, lfu=True, use_se=False,**kwargs):
         super(FFCResNet, self).__init__()
 
         if norm_layer is None:
@@ -149,7 +148,7 @@ class FFCResNet(nn.Module):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion or ratio_gin == 0:
             downsample = FFC_BN_ACT(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride,
-                                    ratio_gin=ratio_gin, ratio_gout=ratio_gout, enable_lfu=self.lfu)
+                                    ratio_gin=ratio_gin, ratio_gout=ratio_gout, lfu=self.lfu)
 
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample, self.groups, self.base_width,
