@@ -189,9 +189,9 @@ To evaluate the models, top-1 and top-3 accuracy were used: top-5 accuracy was n
 ### ResNet-50 on ImageNette
 | Model | Top-1 Acc | Top-3 Acc |
 |---|---|---|
-| ResNet-50 |  |  |
-| FFC-ResNet-50 |  |  |
-| FFC-ResNet-50 + LFU |  |  |
+| ResNet-50 | 89.070 | 97.121 |
+| FFC-ResNet-50 | **89.783** | 97.274 |
+| FFC-ResNet-50 + LFU | 88.943 | **97.299** |
 
 ### Inception v3 on ImageNette
 | Model | Top-1 Acc | Top-3 Acc |
@@ -205,15 +205,15 @@ To evaluate the models, top-1 and top-3 accuracy were used: top-5 accuracy was n
 ### ResNet-50 on ImageWoof
 | Model | Top-1 Acc | Top-3 Acc |
 |---|---|---|
-| ResNet-50 |  |  |
-| FFC-ResNet-50 |  |  |
-| FFC-ResNet-50 + LFU |  |  |
+| ResNet-50 | 80.758 | 95.062 |
+| FFC-ResNet-50 | **81.395** | **95.393** |
+| FFC-ResNet-50 + LFU | 81.267 | 94.884 |
 
 ### Inception v3 on ImageWoof
 | Model | Top-1 Acc | Top-3 Acc |
 |---|---|---|
 | Inception v3 | 75.388 | 92.695 |
 | FFC-Inception v3 | 71.519 | 92.314 |
-| FFC-Inception v3 + LFU |  |  |
-| FFC-Inception v3 + BN | 80.402  | 94.655 |
-| FFC-Inception v3 + BN + LFU |  |  |
+| FFC-Inception v3 + LFU | 65.182 | 89.972 |
+| FFC-Inception v3 + BN | **80.402**  | **94.655** |
+| FFC-Inception v3 + BN + LFU | 68.796 | 90.099 |
